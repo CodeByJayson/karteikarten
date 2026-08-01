@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Karteikarten – Lernen mit Spaced Repetition</title>
+<style>
+:root{
+  --bg-color:#0f172a;
+  --card-bg:#1e293b;
+  --card-bg-soft:#111827;
+  --border-color:#293548;
+  --text-main:#f8fafc;
+  --text-muted:#94a3b8;
+
+  --study-color:#22c55e;
+  --study-color-2:#16a34a;
+  --danger-color:#ef4444;
+  --danger-hover:#dc2626;
+
+  --box1:#ef4444;
+  --box2:#f59e0b;
+  --box3:#eab308;
+  --box4:#22c55e;
+  --box5:#06b6d4;
+
+  --subject-colors: #6366f1,#ec4899,#f59e0b,#06b6d4,#8b5cf6,#3b82f6,#f43f5e,#22c55e,#e879f9,#14b8a6;
+}
+
+*{ box-sizing:border-box; }
+
+body{
+  font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+  background-color:var(--bg-color);
+  color:var(--text-main);
+  margin:0;
+  padding:20px;
+  line-height:1.5;
+}
+
+.container{ max-width:900px; margin:0 auto; }
+@media (min-width:768px){ .container{ max-width:1000px; } }
+
+header{ text-align:center; margin-bottom:20px; }
+h1{ font-size:2rem; margin-bottom:4px; }
+#current-date{ color:var(--text-muted); font-size:0.95rem; }
+
+.streak-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  background:rgba(34,197,94,.12);
+  color:#86efac;
+  padding:6px 14px;
+  border-radius:9999px;
+  font-size:13px;
+  font-weight:700;
+  margin-top:10px;
+}
+
+.backup-bar{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.backup-bar button{ font-size:13px; padding:8px 14px; }
+#backup-status{ text-align:center; font-size:13px; font-weight:600; margin-bottom:10px; min-height:0; }
+#backup-status.success{ color:#6ee7b7; }
+#backup-status.error{ color:var(--danger-color); }
+
+.card{
+  background:var(--card-bg);
+  padding:22px;
+  border-radius:16px;
+  border:1px solid var(--border-color);
+  margin-bottom:20px;
+  box-shadow:0 10px 15px -3px rgba(0,0,0,.3);
+}
+
+h2{ margin-top:0; margin-bottom:16px; font-size:1.15rem; font-weight:600; letter-spacing:-0.025em; display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:wrap; }
+h2 .h2-sub{ font-size:12px; color:var(--text-muted); font-weight:600; }
+
+input, select{
+  background-color:#0f172a;
+  border:1px solid var(--border-color);
+  color:var(--text-main);
+  padding:11px 14px;
+  border-radius:10px;
+  font-size:15px;
+  transition:all .2s;
+}
+input:focus, select:focus{ outline:none; box-shadow:0 0 0 3px rgba(34,197,94,.2); }
+
+select{
+  appearance:none;
+  -webkit-appearance:none;
+  -moz-appearance:none;
+  padding-right:40px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1L6 6L11 1' stroke='%2394a3b8' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat:no-repeat;
+  background-position:right 16px center;
+  background-size:12px 8px;
+  cursor:pointer;
+}
+
+button{
+  background-color:var(--study-color);
+  color:white;
+  border:none;
+  padding:11px 20px;
+  border-radius:10px;
+  font-weight:600;
+  cursor:pointer;
+  transition:background .2s, transform .1s;
+  font-size:14px;
+}
+button:hover{ background-color:var(--study-color-2); }
+button:active{ transform:scale(.97); }
+
+button.delete-btn{
+  background-color:transparent;
+  color:var(--danger-color);
+  border:1px solid var(--danger-color);
+  padding:6px 12px;
+  border-radius:8px;
+  font-size:13px;
+}
+button.delete-btn:hover{ background-color:var(--danger-color); color:white; }
+
+button.ghost{
+  background:transparent;
+  border:1px solid var(--border-color);
+  color:var(--text-muted);
+}
+button.ghost:hover{ background:#334155; color:var(--text-main); }
+
+/* Fach-Chips */
+.subject-bar{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+.subject-chip{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:var(--card-bg-soft);
+  border:1px solid var(--border-color);
+  color:var(--text-muted);
+  padding:8px 14px;
+  border-radius:9999px;
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+  transition:all .15s;
+}
+.subject-chip .dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.subject-chip:hover{ border-color:#475569; color:var(--text-main); }
+.subject-chip.active{ background:#334155; color:var(--text-main); border-color:#475569; }
+.subject-chip .count{ font-size:11px; opacity:.75; }
+.subject-chip .del-x{
+  margin-left:2px; color:var(--text-muted); font-weight:700; line-height:1;
+}
+.subject-chip .del-x:hover{ color:var(--danger-color); }
+.subject-chip.add-chip{ border-style:dashed; }
+
+.form-group{ display:flex; gap:10px; flex-wrap:wrap; }
+.form-group input{ flex:1; min-width:140px; }
+@media (max-width:600px){ .form-group{ flex-direction:column; } .form-group input{ width:100%; } }
+
+/* Stats */
+.stats-row{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:4px; }
+.stat-box{
+  flex:1; min-width:110px;
+  background:var(--card-bg-soft);
+  border:1px solid var(--border-color);
+  border-radius:12px;
+  padding:14px 16px;
+  text-align:center;
+}
+.stat-box .num{ font-size:1.5rem; font-weight:700; }
+.stat-box .label{ color:var(--text-muted); font-size:12px; margin-top:2px; }
+
+/* Review */
+.empty-state{ color:var(--text-muted); text-align:center; margin:20px 0; }
+.celebration{
+  background:linear-gradient(90deg, rgba(16,185,129,.15), rgba(16,185,129,.05));
+  border:1px solid rgba(16,185,129,.4);
+  color:#6ee7b7;
+  padding:16px 18px;
+  border-radius:12px;
+  margin-bottom:6px;
+  font-weight:600;
+  font-size:14px;
+  text-align:center;
+}
+
+.review-card{
+  background:var(--card-bg-soft);
+  border:1px solid var(--border-color);
+  border-radius:14px;
+  padding:26px;
+  text-align:center;
+}
+.review-progress{ color:var(--text-muted); font-size:12px; font-weight:700; margin-bottom:12px; letter-spacing:.03em; }
+.review-subject{
+  display:inline-block;
+  font-size:12px;
+  font-weight:700;
+  padding:4px 12px;
+  border-radius:8px;
+  margin-bottom:14px;
+}
+.review-name{ font-size:1.6rem; font-weight:700; margin:6px 0 18px; word-break:break-word; }
+.review-box-badge{
+  font-size:12px; font-weight:700; color:var(--text-muted);
+  margin-bottom:20px;
+}
+.review-actions{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+.review-actions button{ font-size:15px; padding:14px 26px; min-width:130px; }
+.flashcard-wrong-btn{ background:transparent; border:1px solid var(--danger-color); color:var(--danger-color); }
+.flashcard-wrong-btn:hover{ background-color:var(--danger-color); color:white; }
+.flashcard-correct-btn{ background-color:var(--study-color); }
+.flashcard-correct-btn:hover{ background-color:var(--study-color-2); }
+
+/* Karte-Liste */
+.card-list{ margin-top:4px; }
+.flashcard-item{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  background:var(--card-bg-soft);
+  border:1px solid var(--border-color);
+  border-radius:12px;
+  padding:14px 16px;
+  margin-bottom:10px;
+}
+.flashcard-title{ font-weight:700; font-size:14px; flex:1; min-width:120px; }
+.flashcard-meta{ font-size:11px; color:var(--text-muted); white-space:nowrap; }
+.flashcard-box-badge{
+  font-size:11px;
+  font-weight:700;
+  border-radius:6px;
+  padding:3px 9px;
+  white-space:nowrap;
+}
+.flashcard-due-badge{
+  font-size:11px;
+  font-weight:700;
+  color:var(--text-muted);
+  background:#1e293b;
+  border:1px solid var(--border-color);
+  border-radius:6px;
+  padding:3px 9px;
+  white-space:nowrap;
+}
+.flashcard-due-badge.due-today{ color:#67e8f9; border-color:rgba(6,182,212,.4); background:rgba(6,182,212,.1); }
+
+.filter-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.filter-btn{
+  background:var(--card-bg-soft);
+  border:1px solid var(--border-color);
+  color:var(--text-muted);
+  padding:7px 14px;
+  border-radius:9999px;
+  font-size:12px;
+  font-weight:600;
+}
+.filter-btn:hover{ background:#334155; color:var(--text-main); }
+.filter-btn.active{ background:#334155; color:var(--text-main); border-color:#475569; }
+
+.modal-overlay{
+  display:none;
+  position:fixed; inset:0;
+  background:rgba(0,0,0,.6);
+  align-items:center; justify-content:center;
+  padding:20px;
+  z-index:50;
+}
+.modal-overlay.open{ display:flex; }
+.modal-box{
+  background:var(--card-bg);
+  border:1px solid var(--border-color);
+  border-radius:16px;
+  padding:24px;
+  max-width:360px;
+  width:100%;
+}
+.modal-box h3{ margin-top:0; }
+.modal-box .form-group{ margin-bottom:14px; }
+.modal-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:6px; }
+
+.sr-legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--text-muted); margin-top:10px; }
+.sr-legend span{ display:flex; align-items:center; gap:5px; }
+.sr-legend .dot{ width:9px; height:9px; border-radius:50%; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🗂️ Karteikarten</h1>
+    <div id="current-date"></div>
+    <div class="streak-badge" id="streak-badge">🔥 0 Tage Streak</div>
+  </header>
+
+  <div class="backup-bar">
+    <button class="ghost" id="export-btn">⬇️ Export (JSON)</button>
+    <button class="ghost" id="import-btn">⬆️ Import</button>
+    <input type="file" id="import-file" accept="application/json" style="display:none;">
+  </div>
+  <div id="backup-status"></div>
+
+  <!-- Fächer -->
+  <div class="card">
+    <h2>📚 Fächer</h2>
+    <div class="subject-bar" id="subject-bar"></div>
+    <div class="form-group" id="add-subject-form" style="display:none;">
+      <input type="text" id="new-subject-input" placeholder="Neues Fach, z.B. Mathe">
+      <button id="save-subject-btn">Hinzufügen</button>
+      <button class="ghost" id="cancel-subject-btn">Abbrechen</button>
+    </div>
+  </div>
+
+  <!-- Karte hinzufügen -->
+  <div class="card">
+    <h2>➕ Neue Karteikarte</h2>
+    <div class="form-group">
+      <input type="text" id="new-card-input" placeholder="Titel / Stichwort der Karte">
+      <select id="new-card-subject"></select>
+      <button id="add-card-btn">Hinzufügen</button>
+    </div>
+  </div>
+
+  <!-- Heute lernen -->
+  <div class="card">
+    <h2>🎯 Heute lernen <span class="h2-sub" id="due-count-label"></span></h2>
+    <div id="review-area"></div>
+  </div>
+
+  <!-- Übersicht / Stats -->
+  <div class="card">
+    <h2>📊 Übersicht</h2>
+    <div class="stats-row" id="stats-row"></div>
+    <div class="sr-legend">
+      <span><span class="dot" style="background:var(--box1)"></span>Box 1 (1 Tag)</span>
+      <span><span class="dot" style="background:var(--box2)"></span>Box 2 (2 Tage)</span>
+      <span><span class="dot" style="background:var(--box3)"></span>Box 3 (4 Tage)</span>
+      <span><span class="dot" style="background:var(--box4)"></span>Box 4 (8 Tage)</span>
+      <span><span class="dot" style="background:var(--box5)"></span>Box 5 (16 Tage)</span>
+    </div>
+  </div>
+
+  <!-- Alle Karten -->
+  <div class="card">
+    <h2>🗃️ Alle Karten</h2>
+    <div class="filter-row" id="filter-row"></div>
+    <div class="card-list" id="card-list"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal-box">
+    <h3>Karte bearbeiten</h3>
+    <div class="form-group">
+      <input type="text" id="edit-card-input" style="width:100%;">
+    </div>
+    <div class="form-group">
+      <select id="edit-card-subject" style="width:100%;"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" id="edit-cancel-btn">Abbrechen</button>
+      <button id="edit-save-btn">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script src="karteikarten.js"></script>
+</body>
+</html>
