@@ -11,12 +11,19 @@ let subjects = JSON.parse(localStorage.getItem(LS_SUBJECTS) || 'null') || [
 ];
 let cards = JSON.parse(localStorage.getItem(LS_CARDS) || '[]');
 let streak = JSON.parse(localStorage.getItem(LS_STREAK) || 'null') || { count: 0, lastDate: null };
+const LS_DAILY = 'kk_daily';
+let daily = JSON.parse(localStorage.getItem(LS_DAILY) || 'null') || { date: null, correct: 0, wrong: 0 };
 
 let activeSubjectFilter = 'all'; // 'all' or subject id
 let listFilter = 'all'; // all | due | box1..5
 let reviewQueue = [];
 let reviewIndex = 0;
 let reviewSubjectFilter = 'all';
+
+// Natürliche Sortierung: erkennt Zahlen im Namen und sortiert sie numerisch
+// aufsteigend (z.B. "Karte 2" vor "Karte 10"), statt rein alphabetisch.
+const naturalCollator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
+function compareByName(a, b){ return naturalCollator.compare(a.name, b.name); }
 
 function todayStr(){
   const d = new Date();
@@ -32,6 +39,13 @@ function saveAll(){
   localStorage.setItem(LS_SUBJECTS, JSON.stringify(subjects));
   localStorage.setItem(LS_CARDS, JSON.stringify(cards));
   localStorage.setItem(LS_STREAK, JSON.stringify(streak));
+  localStorage.setItem(LS_DAILY, JSON.stringify(daily));
+}
+function ensureDailyIsToday(){
+  const t = todayStr();
+  if (daily.date !== t) {
+    daily = { date: t, correct: 0, wrong: 0 };
+  }
 }
 function subjectColor(subjectId){
   const idx = subjects.findIndex(s => s.id === subjectId);
@@ -168,14 +182,21 @@ document.getElementById('new-card-input').addEventListener('keydown', e => {
 function buildReviewQueue(){
   const t = todayStr();
   reviewQueue = cards.filter(c => c.nextReview <= t && (reviewSubjectFilter === 'all' || c.subject === reviewSubjectFilter));
-  reviewQueue.sort((a,b) => a.nextReview.localeCompare(b.nextReview));
+  reviewQueue.sort(compareByName);
   reviewIndex = 0;
 }
 
 function renderReviewArea(){
   const area = document.getElementById('review-area');
   const dueLabel = document.getElementById('due-count-label');
+  const tallyLabel = document.getElementById('today-tally-label');
+  ensureDailyIsToday();
   buildReviewQueue();
+
+  const tallyText = (daily.correct > 0 || daily.wrong > 0)
+    ? `✓ ${daily.correct} · ✗ ${daily.wrong} heute`
+    : '';
+  tallyLabel.textContent = tallyText;
 
   if (cards.length === 0) {
     dueLabel.textContent = '';
@@ -211,12 +232,15 @@ function renderReviewArea(){
 
 function answerCard(card, correct){
   const t = todayStr();
+  ensureDailyIsToday();
   if (correct) {
     card.box = Math.min(card.box + 1, BOX_INTERVALS.length);
-    card.correctCount += 1;
+    card.correctCount = (card.correctCount || 0) + 1;
+    daily.correct += 1;
   } else {
     card.box = 1;
-    card.wrongCount += 1;
+    card.wrongCount = (card.wrongCount || 0) + 1;
+    daily.wrong += 1;
   }
   card.nextReview = addDays(t, BOX_INTERVALS[card.box - 1]);
   card.lastReviewed = t;
@@ -280,7 +304,7 @@ function renderCardList(){
     filtered = filtered.filter(c => c.box === n);
   }
 
-  filtered.sort((a,b) => a.nextReview.localeCompare(b.nextReview) || a.name.localeCompare(b.name));
+  filtered.sort(compareByName);
 
   if (filtered.length === 0) {
     list.innerHTML = `<div class="empty-state">Keine Karten in dieser Ansicht.</div>`;
