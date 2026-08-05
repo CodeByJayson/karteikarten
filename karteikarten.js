@@ -11,19 +11,12 @@ let subjects = JSON.parse(localStorage.getItem(LS_SUBJECTS) || 'null') || [
 ];
 let cards = JSON.parse(localStorage.getItem(LS_CARDS) || '[]');
 let streak = JSON.parse(localStorage.getItem(LS_STREAK) || 'null') || { count: 0, lastDate: null };
-const LS_DAILY = 'kk_daily';
-let daily = JSON.parse(localStorage.getItem(LS_DAILY) || 'null') || { date: null, correct: 0, wrong: 0 };
 
 let activeSubjectFilter = 'all'; // 'all' or subject id
 let listFilter = 'all'; // all | due | box1..5
 let reviewQueue = [];
 let reviewIndex = 0;
 let reviewSubjectFilter = 'all';
-
-// Natürliche Sortierung: erkennt Zahlen im Namen und sortiert sie numerisch
-// aufsteigend (z.B. "Karte 2" vor "Karte 10"), statt rein alphabetisch.
-const naturalCollator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
-function compareByName(a, b){ return naturalCollator.compare(a.name, b.name); }
 
 function todayStr(){
   const d = new Date();
@@ -39,13 +32,6 @@ function saveAll(){
   localStorage.setItem(LS_SUBJECTS, JSON.stringify(subjects));
   localStorage.setItem(LS_CARDS, JSON.stringify(cards));
   localStorage.setItem(LS_STREAK, JSON.stringify(streak));
-  localStorage.setItem(LS_DAILY, JSON.stringify(daily));
-}
-function ensureDailyIsToday(){
-  const t = todayStr();
-  if (daily.date !== t) {
-    daily = { date: t, correct: 0, wrong: 0 };
-  }
 }
 function subjectColor(subjectId){
   const idx = subjects.findIndex(s => s.id === subjectId);
@@ -182,21 +168,14 @@ document.getElementById('new-card-input').addEventListener('keydown', e => {
 function buildReviewQueue(){
   const t = todayStr();
   reviewQueue = cards.filter(c => c.nextReview <= t && (reviewSubjectFilter === 'all' || c.subject === reviewSubjectFilter));
-  reviewQueue.sort(compareByName);
+  reviewQueue.sort((a,b) => a.nextReview.localeCompare(b.nextReview));
   reviewIndex = 0;
 }
 
 function renderReviewArea(){
   const area = document.getElementById('review-area');
   const dueLabel = document.getElementById('due-count-label');
-  const tallyLabel = document.getElementById('today-tally-label');
-  ensureDailyIsToday();
   buildReviewQueue();
-
-  const tallyText = (daily.correct > 0 || daily.wrong > 0)
-    ? `✓ ${daily.correct} · ✗ ${daily.wrong} heute`
-    : '';
-  tallyLabel.textContent = tallyText;
 
   if (cards.length === 0) {
     dueLabel.textContent = '';
@@ -232,15 +211,12 @@ function renderReviewArea(){
 
 function answerCard(card, correct){
   const t = todayStr();
-  ensureDailyIsToday();
   if (correct) {
     card.box = Math.min(card.box + 1, BOX_INTERVALS.length);
-    card.correctCount = (card.correctCount || 0) + 1;
-    daily.correct += 1;
+    card.correctCount += 1;
   } else {
     card.box = 1;
-    card.wrongCount = (card.wrongCount || 0) + 1;
-    daily.wrong += 1;
+    card.wrongCount += 1;
   }
   card.nextReview = addDays(t, BOX_INTERVALS[card.box - 1]);
   card.lastReviewed = t;
@@ -293,6 +269,23 @@ function renderFilterRow(){
   });
 }
 
+// Hilfsfunktion: Zerlegt den Titel in Nummer, Thema und Rest
+function parseCardTitle(title) {
+  // Erkennt: (Zahl) - (Thema/Kürzel): (Restlicher Text)
+  const match = title.match(/^(\d+)\s*-\s*([^:]+):?\s*(.*)$/);
+  
+  if (match) {
+    return {
+      num: parseInt(match[1], 10),          // 1, 11, 20
+      topic: match[2].trim().toLowerCase(), // "uh", "kp"
+      rest: match[3].trim().toLowerCase()   // restlicher Text
+    };
+  }
+  
+  // Fallback für Karten ohne Schema
+  return { num: 999999, topic: title.toLowerCase(), rest: '' };
+}
+
 function renderCardList(){
   const list = document.getElementById('card-list');
   const t = todayStr();
@@ -304,7 +297,29 @@ function renderCardList(){
     filtered = filtered.filter(c => c.box === n);
   }
 
-  filtered.sort(compareByName);
+  // Sortierung:
+  // 1. Fach (z. B. WR)
+  // 2. Thema (z. B. KP, dann UH) -> ALLE Karten eines Themas untereinander!
+  // 3. Nummer (1, 2, 11, 20...) innerhalb des Themas
+  // 4. Alphabetisch nach dem restlichen Text
+  filtered.sort((a, b) => {
+    // 1. Fach
+    const sA = subjectName(a.subject).toLowerCase();
+    const sB = subjectName(b.subject).toLowerCase();
+    if (sA !== sB) return sA.localeCompare(sB, 'de');
+
+    const pA = parseCardTitle(a.name);
+    const pB = parseCardTitle(b.name);
+
+    // 2. Erst nach Thema gruppieren (z. B. "kp" vor "uh")
+    if (pA.topic !== pB.topic) return pA.topic.localeCompare(pB.topic, 'de');
+
+    // 3. Innerhalb desselben Themas nach Nummer sortieren (1, 2, 11, 20...)
+    if (pA.num !== pB.num) return pA.num - pB.num;
+
+    // 4. Restlicher Kartentext
+    return pA.rest.localeCompare(pB.rest, 'de', { numeric: true });
+  });
 
   if (filtered.length === 0) {
     list.innerHTML = `<div class="empty-state">Keine Karten in dieser Ansicht.</div>`;
