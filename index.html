@@ -58,8 +58,16 @@ h1{ font-size:2rem; margin-bottom:4px; }
   margin-top:10px;
 }
 
-.backup-bar{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.backup-bar{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
 .backup-bar button{ font-size:13px; padding:8px 14px; }
+.backup-note{ 
+  text-align:center; 
+  font-size:12px; 
+  color:var(--text-muted); 
+  margin-bottom:16px; 
+  line-height:1.4;
+}
+.backup-note strong{ color:#f59e0b; }
 #backup-status{ text-align:center; font-size:13px; font-weight:600; margin-bottom:10px; min-height:0; }
 #backup-status.success{ color:#6ee7b7; }
 #backup-status.error{ color:var(--danger-color); }
@@ -158,6 +166,7 @@ button.ghost:hover{ background:#334155; color:var(--text-main); }
 
 .form-group{ display:flex; gap:10px; flex-wrap:wrap; }
 .form-group input{ flex:1; min-width:140px; }
+.input-hint{ display:block; width:100%; font-size:12px; color:var(--text-muted); margin-top:6px; }
 @media (max-width:600px){ .form-group{ flex-direction:column; } .form-group input{ width:100%; } }
 
 /* Stats */
@@ -301,9 +310,11 @@ button.ghost:hover{ background:#334155; color:var(--text-main); }
     <button class="ghost" id="import-btn">⬆️ Import</button>
     <input type="file" id="import-file" accept="application/json" style="display:none;">
   </div>
+  <div class="backup-note">
+    <strong>⚠️ Hinweis:</strong> Deine Daten werden nur lokal in diesem Browser gespeichert. Wenn du den Verlauf oder Websitedaten löschst, gehen sie verloren. Lade dir deshalb <strong>regelmäßig ein Backup</strong> herunter!
+  </div>
   <div id="backup-status"></div>
 
-  <!-- Fächer -->
   <div class="card">
     <h2>📚 Fächer</h2>
     <div class="subject-bar" id="subject-bar"></div>
@@ -314,23 +325,23 @@ button.ghost:hover{ background:#334155; color:var(--text-main); }
     </div>
   </div>
 
-  <!-- Karte hinzufügen -->
   <div class="card">
-    <h2>➕ Neue Karteikarte</h2>
-    <div class="form-group">
-      <input type="text" id="new-card-input" placeholder="Titel / Stichwort der Karte">
-      <select id="new-card-subject"></select>
-      <button id="add-card-btn">Hinzufügen</button>
-    </div>
-  </div>
-
-  <!-- Heute lernen -->
-  <div class="card">
-    <h2>🎯 Heute lernen <span class="h2-sub" id="due-count-label"></span><span class="h2-sub" id="today-tally-label" style="color:#86efac;"></span></h2>
+    <h2>🎯 Heute lernen <span class="h2-sub" id="due-count-label"></span></h2>
     <div id="review-area"></div>
   </div>
 
-  <!-- Übersicht / Stats -->
+  <div class="card">
+    <h2>➕ Neue Karteikarte</h2>
+    <div class="form-group">
+      <input type="text" id="new-card-input" placeholder="zBsp.: 43 - GE: Chromosomen">
+      <select id="new-card-subject"></select>
+      <button id="add-card-btn">Hinzufügen</button>
+      <small class="input-hint">💡 Namensformat: <strong>Zahl - Thema: Titel</strong> (zBsp.: <em>43 - GE: Chromosomen</em> / <em>8 - WP: Angebot & Nachfrage</em>)</small>
+    </div>
+  </div>
+
+  
+
   <div class="card">
     <h2>📊 Übersicht</h2>
     <div class="stats-row" id="stats-row"></div>
@@ -343,7 +354,6 @@ button.ghost:hover{ background:#334155; color:var(--text-main); }
     </div>
   </div>
 
-  <!-- Alle Karten -->
   <div class="card">
     <h2>🗃️ Alle Karten</h2>
     <div class="filter-row" id="filter-row"></div>
