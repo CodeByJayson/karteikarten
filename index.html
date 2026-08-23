@@ -58,16 +58,8 @@ h1{ font-size:2rem; margin-bottom:4px; }
   margin-top:10px;
 }
 
-.backup-bar{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
+.backup-bar{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
 .backup-bar button{ font-size:13px; padding:8px 14px; }
-.backup-note{ 
-  text-align:center; 
-  font-size:12px; 
-  color:var(--text-muted); 
-  margin-bottom:16px; 
-  line-height:1.4;
-}
-.backup-note strong{ color:#f59e0b; }
 #backup-status{ text-align:center; font-size:13px; font-weight:600; margin-bottom:10px; min-height:0; }
 #backup-status.success{ color:#6ee7b7; }
 #backup-status.error{ color:var(--danger-color); }
@@ -166,7 +158,6 @@ button.ghost:hover{ background:#334155; color:var(--text-main); }
 
 .form-group{ display:flex; gap:10px; flex-wrap:wrap; }
 .form-group input{ flex:1; min-width:140px; }
-.input-hint{ display:block; width:100%; font-size:12px; color:var(--text-muted); margin-top:6px; }
 @media (max-width:600px){ .form-group{ flex-direction:column; } .form-group input{ width:100%; } }
 
 /* Stats */
@@ -221,6 +212,8 @@ button.ghost:hover{ background:#334155; color:var(--text-main); }
 .review-actions button{ font-size:15px; padding:14px 26px; min-width:130px; }
 .flashcard-wrong-btn{ background:transparent; border:1px solid var(--danger-color); color:var(--danger-color); }
 .flashcard-wrong-btn:hover{ background-color:var(--danger-color); color:white; }
+.flashcard-partial-btn{ background:transparent; border:1px solid var(--box2); color:var(--box2); }
+.flashcard-partial-btn:hover{ background-color:var(--box2); color:#1e293b; }
 .flashcard-correct-btn{ background-color:var(--study-color); }
 .flashcard-correct-btn:hover{ background-color:var(--study-color-2); }
 
@@ -292,9 +285,25 @@ button.ghost:hover{ background:#334155; color:var(--text-main); }
 .modal-box .form-group{ margin-bottom:14px; }
 .modal-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:6px; }
 
-.sr-legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--text-muted); margin-top:10px; }
-.sr-legend span{ display:flex; align-items:center; gap:5px; }
-.sr-legend .dot{ width:9px; height:9px; border-radius:50%; }
+.box-dist{ display:flex; flex-direction:column; gap:10px; margin-top:14px; }
+.box-dist-row{ display:flex; align-items:center; gap:12px; }
+.box-dist-label{ width:100px; flex-shrink:0; font-size:12px; font-weight:700; color:var(--text-muted); }
+.box-dist-track{
+  flex:1;
+  height:16px;
+  background:var(--card-bg-soft);
+  border:1px solid var(--border-color);
+  border-radius:9999px;
+  overflow:hidden;
+  position:relative;
+}
+.box-dist-fill{
+  height:100%;
+  border-radius:9999px;
+  transition:width .4s cubic-bezier(.4,0,.2,1);
+  min-width:2px;
+}
+.box-dist-count{ width:34px; flex-shrink:0; text-align:right; font-size:13px; font-weight:700; }
 </style>
 </head>
 <body>
@@ -310,11 +319,9 @@ button.ghost:hover{ background:#334155; color:var(--text-main); }
     <button class="ghost" id="import-btn">⬆️ Import</button>
     <input type="file" id="import-file" accept="application/json" style="display:none;">
   </div>
-  <div class="backup-note">
-    <strong>⚠️ Hinweis:</strong> Deine Daten werden nur lokal in diesem Browser gespeichert. Wenn du den Verlauf oder Websitedaten löschst, gehen sie verloren. Lade dir deshalb <strong>regelmäßig ein Backup</strong> herunter!
-  </div>
   <div id="backup-status"></div>
 
+  <!-- Fächer -->
   <div class="card">
     <h2>📚 Fächer</h2>
     <div class="subject-bar" id="subject-bar"></div>
@@ -325,35 +332,30 @@ button.ghost:hover{ background:#334155; color:var(--text-main); }
     </div>
   </div>
 
-  <div class="card">
-    <h2>🎯 Heute lernen <span class="h2-sub" id="due-count-label"></span></h2>
-    <div id="review-area"></div>
-  </div>
-
+  <!-- Karte hinzufügen -->
   <div class="card">
     <h2>➕ Neue Karteikarte</h2>
     <div class="form-group">
-      <input type="text" id="new-card-input" placeholder="zBsp.: 43 - GE: Chromosomen">
+      <input type="text" id="new-card-input" placeholder="Titel / Stichwort der Karte">
       <select id="new-card-subject"></select>
       <button id="add-card-btn">Hinzufügen</button>
-      <small class="input-hint">💡 Namensformat: <strong>Zahl - Thema: Titel</strong> (zBsp.: <em>43 - GE: Chromosomen</em> / <em>8 - WP: Angebot & Nachfrage</em>)</small>
     </div>
   </div>
 
-  
+  <!-- Heute lernen -->
+  <div class="card">
+    <h2>🎯 Heute lernen <span class="h2-sub" id="due-count-label"></span><span class="h2-sub" id="today-tally-label" style="color:#86efac;"></span></h2>
+    <div id="review-area"></div>
+  </div>
 
+  <!-- Übersicht / Stats -->
   <div class="card">
     <h2>📊 Übersicht</h2>
     <div class="stats-row" id="stats-row"></div>
-    <div class="sr-legend">
-      <span><span class="dot" style="background:var(--box1)"></span>Box 1 (1 Tag)</span>
-      <span><span class="dot" style="background:var(--box2)"></span>Box 2 (2 Tage)</span>
-      <span><span class="dot" style="background:var(--box3)"></span>Box 3 (4 Tage)</span>
-      <span><span class="dot" style="background:var(--box4)"></span>Box 4 (8 Tage)</span>
-      <span><span class="dot" style="background:var(--box5)"></span>Box 5 (16 Tage)</span>
-    </div>
+    <div class="box-dist" id="box-dist"></div>
   </div>
 
+  <!-- Alle Karten -->
   <div class="card">
     <h2>🗃️ Alle Karten</h2>
     <div class="filter-row" id="filter-row"></div>
