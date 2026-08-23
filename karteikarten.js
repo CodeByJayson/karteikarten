@@ -10,13 +10,22 @@ let subjects = JSON.parse(localStorage.getItem(LS_SUBJECTS) || 'null') || [
   { id: 'id2', name: 'WR' }
 ];
 let cards = JSON.parse(localStorage.getItem(LS_CARDS) || '[]');
+cards.forEach(c => { if (c.partialCount === undefined) c.partialCount = 0; });
 let streak = JSON.parse(localStorage.getItem(LS_STREAK) || 'null') || { count: 0, lastDate: null };
+const LS_DAILY = 'kk_daily';
+let daily = JSON.parse(localStorage.getItem(LS_DAILY) || 'null') || { date: null, correct: 0, partial: 0, wrong: 0 };
+if (daily.partial === undefined) daily.partial = 0;
 
 let activeSubjectFilter = 'all'; // 'all' or subject id
 let listFilter = 'all'; // all | due | box1..5
 let reviewQueue = [];
 let reviewIndex = 0;
 let reviewSubjectFilter = 'all';
+
+// Natürliche Sortierung: erkennt Zahlen im Namen und sortiert sie numerisch
+// aufsteigend (z.B. "Karte 2" vor "Karte 10"), statt rein alphabetisch.
+const naturalCollator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
+function compareByName(a, b){ return naturalCollator.compare(a.name, b.name); }
 
 function todayStr(){
   const d = new Date();
@@ -32,6 +41,13 @@ function saveAll(){
   localStorage.setItem(LS_SUBJECTS, JSON.stringify(subjects));
   localStorage.setItem(LS_CARDS, JSON.stringify(cards));
   localStorage.setItem(LS_STREAK, JSON.stringify(streak));
+  localStorage.setItem(LS_DAILY, JSON.stringify(daily));
+}
+function ensureDailyIsToday(){
+  const t = todayStr();
+  if (daily.date !== t) {
+    daily = { date: t, correct: 0, partial: 0, wrong: 0 };
+  }
 }
 function subjectColor(subjectId){
   const idx = subjects.findIndex(s => s.id === subjectId);
@@ -153,6 +169,7 @@ document.getElementById('add-card-btn').onclick = () => {
     nextReview: todayStr(),
     created: todayStr(),
     correctCount: 0,
+    partialCount: 0,
     wrongCount: 0
   });
   input.value = '';
@@ -168,14 +185,21 @@ document.getElementById('new-card-input').addEventListener('keydown', e => {
 function buildReviewQueue(){
   const t = todayStr();
   reviewQueue = cards.filter(c => c.nextReview <= t && (reviewSubjectFilter === 'all' || c.subject === reviewSubjectFilter));
-  reviewQueue.sort((a,b) => a.nextReview.localeCompare(b.nextReview));
+  reviewQueue.sort(compareByName);
   reviewIndex = 0;
 }
 
 function renderReviewArea(){
   const area = document.getElementById('review-area');
   const dueLabel = document.getElementById('due-count-label');
+  const tallyLabel = document.getElementById('today-tally-label');
+  ensureDailyIsToday();
   buildReviewQueue();
+
+  const tallyText = (daily.correct > 0 || daily.partial > 0 || daily.wrong > 0)
+    ? `✓ ${daily.correct} · ◐ ${daily.partial} · ✗ ${daily.wrong} heute`
+    : '';
+  tallyLabel.textContent = tallyText;
 
   if (cards.length === 0) {
     dueLabel.textContent = '';
@@ -197,33 +221,46 @@ function renderReviewArea(){
       <div class="review-progress">KARTE ${reviewIndex + 1} / ${reviewQueue.length}</div>
       <div class="review-subject" style="background:${subjectColor(c.subject)}22; color:${subjectColor(c.subject)};">${escapeHtml(subjectName(c.subject))}</div>
       <div class="review-name">${escapeHtml(c.name)}</div>
-      <div class="review-box-badge" style="color:${BOX_COLORS[boxIdx]};">Box ${c.box} · bisher ${c.correctCount}× gewusst, ${c.wrongCount}× nicht gewusst</div>
+      <div class="review-box-badge" style="color:${BOX_COLORS[boxIdx]};">Box ${c.box} · bisher ${c.correctCount}× gewusst, ${c.partialCount || 0}× teilweise, ${c.wrongCount}× nicht gewusst</div>
       <div class="review-actions">
         <button class="flashcard-wrong-btn" id="review-wrong-btn">✗ Nicht gewusst</button>
+        <button class="flashcard-partial-btn" id="review-partial-btn">◐ Teilweise</button>
         <button class="flashcard-correct-btn" id="review-correct-btn">✓ Gewusst</button>
       </div>
     </div>
   `;
 
-  document.getElementById('review-wrong-btn').onclick = () => answerCard(c, false);
-  document.getElementById('review-correct-btn').onclick = () => answerCard(c, true);
+  document.getElementById('review-wrong-btn').onclick = () => answerCard(c, 'wrong');
+  document.getElementById('review-partial-btn').onclick = () => answerCard(c, 'partial');
+  document.getElementById('review-correct-btn').onclick = () => answerCard(c, 'correct');
 }
 
-function answerCard(card, correct){
+function answerCard(card, result){
   const t = todayStr();
-  if (correct) {
+  ensureDailyIsToday();
+  if (result === 'correct') {
     card.box = Math.min(card.box + 1, BOX_INTERVALS.length);
-    card.correctCount += 1;
+    card.correctCount = (card.correctCount || 0) + 1;
+    daily.correct += 1;
+    card.nextReview = addDays(t, BOX_INTERVALS[card.box - 1]);
+  } else if (result === 'partial') {
+    // Box bleibt gleich, aber kürzeres Intervall bis zur nächsten Wiederholung
+    card.partialCount = (card.partialCount || 0) + 1;
+    daily.partial += 1;
+    const halfInterval = Math.max(1, Math.round(BOX_INTERVALS[card.box - 1] / 2));
+    card.nextReview = addDays(t, halfInterval);
   } else {
     card.box = 1;
-    card.wrongCount += 1;
+    card.wrongCount = (card.wrongCount || 0) + 1;
+    daily.wrong += 1;
+    card.nextReview = addDays(t, BOX_INTERVALS[card.box - 1]);
   }
-  card.nextReview = addDays(t, BOX_INTERVALS[card.box - 1]);
   card.lastReviewed = t;
   bumpStreak();
   saveAll();
   renderReviewArea();
   renderStatsRow();
+  renderBoxDistribution();
   renderCardList();
   renderSubjectBar();
 }
@@ -235,8 +272,8 @@ function renderStatsRow(){
   const relevant = cards.filter(c => activeSubjectFilter === 'all' || c.subject === activeSubjectFilter);
   const due = relevant.filter(c => c.nextReview <= t).length;
   const mastered = relevant.filter(c => c.box === BOX_INTERVALS.length).length;
-  const totalAnswers = relevant.reduce((s,c) => s + c.correctCount + c.wrongCount, 0);
-  const totalCorrect = relevant.reduce((s,c) => s + c.correctCount, 0);
+  const totalAnswers = relevant.reduce((s,c) => s + c.correctCount + (c.partialCount || 0) + c.wrongCount, 0);
+  const totalCorrect = relevant.reduce((s,c) => s + c.correctCount + 0.5 * (c.partialCount || 0), 0);
   const acc = totalAnswers > 0 ? Math.round((totalCorrect / totalAnswers) * 100) : 0;
 
   row.innerHTML = `
@@ -245,6 +282,32 @@ function renderStatsRow(){
     <div class="stat-box"><div class="num">${mastered}</div><div class="label">gemeistert (Box 5)</div></div>
     <div class="stat-box"><div class="num">${acc}%</div><div class="label">Trefferquote</div></div>
   `;
+}
+
+function renderBoxDistribution(){
+  const container = document.getElementById('box-dist');
+  const relevant = cards.filter(c => activeSubjectFilter === 'all' || c.subject === activeSubjectFilter);
+  const boxLabels = ['Box 1 (1 Tag)', 'Box 2 (2 Tage)', 'Box 3 (4 Tage)', 'Box 4 (8 Tage)', 'Box 5 (16 Tage)'];
+  const counts = [1,2,3,4,5].map(n => relevant.filter(c => c.box === n).length);
+  const maxCount = Math.max(1, ...counts);
+
+  if (relevant.length === 0) {
+    container.innerHTML = `<div class="empty-state" style="margin:8px 0;">Noch keine Karten für diese Ansicht.</div>`;
+    return;
+  }
+
+  container.innerHTML = counts.map((count, i) => {
+    const pct = Math.round((count / maxCount) * 100);
+    return `
+      <div class="box-dist-row">
+        <div class="box-dist-label" style="color:${BOX_COLORS[i]};">${boxLabels[i]}</div>
+        <div class="box-dist-track">
+          <div class="box-dist-fill" style="width:${count > 0 ? pct : 0}%; background:${BOX_COLORS[i]};"></div>
+        </div>
+        <div class="box-dist-count">${count}</div>
+      </div>
+    `;
+  }).join('');
 }
 
 /* ---------- Kartenliste ---------- */
@@ -269,23 +332,6 @@ function renderFilterRow(){
   });
 }
 
-// Hilfsfunktion: Zerlegt den Titel in Nummer, Thema und Rest
-function parseCardTitle(title) {
-  // Erkennt: (Zahl) - (Thema/Kürzel): (Restlicher Text)
-  const match = title.match(/^(\d+)\s*-\s*([^:]+):?\s*(.*)$/);
-  
-  if (match) {
-    return {
-      num: parseInt(match[1], 10),          // 1, 11, 20
-      topic: match[2].trim().toLowerCase(), // "uh", "kp"
-      rest: match[3].trim().toLowerCase()   // restlicher Text
-    };
-  }
-  
-  // Fallback für Karten ohne Schema
-  return { num: 999999, topic: title.toLowerCase(), rest: '' };
-}
-
 function renderCardList(){
   const list = document.getElementById('card-list');
   const t = todayStr();
@@ -297,29 +343,7 @@ function renderCardList(){
     filtered = filtered.filter(c => c.box === n);
   }
 
-  // Sortierung:
-  // 1. Fach (z. B. WR)
-  // 2. Thema (z. B. KP, dann UH) -> ALLE Karten eines Themas untereinander!
-  // 3. Nummer (1, 2, 11, 20...) innerhalb des Themas
-  // 4. Alphabetisch nach dem restlichen Text
-  filtered.sort((a, b) => {
-    // 1. Fach
-    const sA = subjectName(a.subject).toLowerCase();
-    const sB = subjectName(b.subject).toLowerCase();
-    if (sA !== sB) return sA.localeCompare(sB, 'de');
-
-    const pA = parseCardTitle(a.name);
-    const pB = parseCardTitle(b.name);
-
-    // 2. Erst nach Thema gruppieren (z. B. "kp" vor "uh")
-    if (pA.topic !== pB.topic) return pA.topic.localeCompare(pB.topic, 'de');
-
-    // 3. Innerhalb desselben Themas nach Nummer sortieren (1, 2, 11, 20...)
-    if (pA.num !== pB.num) return pA.num - pB.num;
-
-    // 4. Restlicher Kartentext
-    return pA.rest.localeCompare(pB.rest, 'de', { numeric: true });
-  });
+  filtered.sort(compareByName);
 
   if (filtered.length === 0) {
     list.innerHTML = `<div class="empty-state">Keine Karten in dieser Ansicht.</div>`;
@@ -337,7 +361,7 @@ function renderCardList(){
       <span class="flashcard-meta" style="color:${subjectColor(c.subject)}">${escapeHtml(subjectName(c.subject))}</span>
       <span class="flashcard-box-badge" style="color:${BOX_COLORS[boxIdx]}; background:${BOX_COLORS[boxIdx]}22;">Box ${c.box}</span>
       <span class="flashcard-due-badge ${isDue ? 'due-today' : ''}">${isDue ? 'heute fällig' : 'ab ' + formatDate(c.nextReview)}</span>
-      <span class="flashcard-meta">${c.correctCount}✓ / ${c.wrongCount}✗</span>
+      <span class="flashcard-meta">${c.correctCount}✓ / ${c.partialCount || 0}◐ / ${c.wrongCount}✗</span>
       <button class="ghost edit-x-btn" style="padding:6px 12px; font-size:13px;">✎</button>
       <button class="delete-btn del-x-btn">Löschen</button>
     `;
@@ -404,6 +428,7 @@ document.getElementById('import-file').addEventListener('change', (e) => {
       if (!data.subjects || !data.cards) throw new Error('Ungültiges Format');
       subjects = data.subjects;
       cards = data.cards;
+      cards.forEach(c => { if (c.partialCount === undefined) c.partialCount = 0; });
       streak = data.streak || { count: 0, lastDate: null };
       saveAll();
       renderAll();
@@ -436,6 +461,7 @@ function renderAll(){
   reviewSubjectFilter = activeSubjectFilter;
   renderReviewArea();
   renderStatsRow();
+  renderBoxDistribution();
   renderFilterRow();
   renderCardList();
 }
