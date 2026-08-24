@@ -25,7 +25,14 @@ let reviewSubjectFilter = 'all';
 // Natürliche Sortierung: erkennt Zahlen im Namen und sortiert sie numerisch
 // aufsteigend (z.B. "Karte 2" vor "Karte 10"), statt rein alphabetisch.
 const naturalCollator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
-function compareByName(a, b){ return naturalCollator.compare(a.name, b.name); }
+function compareByName(a, b){
+  // Erst nach Fach gruppieren (in der Reihenfolge, wie die Fächer angelegt wurden),
+  // danach innerhalb des Fachs numerisch/alphabetisch nach Titel sortieren.
+  const subjectIndexA = subjects.findIndex(s => s.id === a.subject);
+  const subjectIndexB = subjects.findIndex(s => s.id === b.subject);
+  if (subjectIndexA !== subjectIndexB) return subjectIndexA - subjectIndexB;
+  return naturalCollator.compare(a.name, b.name);
+}
 
 function todayStr(){
   const d = new Date();
