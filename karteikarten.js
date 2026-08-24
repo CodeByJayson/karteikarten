@@ -25,12 +25,36 @@ let reviewSubjectFilter = 'all';
 // Natürliche Sortierung: erkennt Zahlen im Namen und sortiert sie numerisch
 // aufsteigend (z.B. "Karte 2" vor "Karte 10"), statt rein alphabetisch.
 const naturalCollator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
+
+// Erkennt Titel im Format "12 - GB: Hallo" und liefert { num: 12, topic: 'GB' }.
+// Titel ohne dieses Format liefern null (werden dann hinter erkannten Titeln einsortiert).
+function parseCardTitle(name){
+  const m = String(name).match(/^\s*(\d+)\s*-\s*([^:]+):/);
+  if (!m) return null;
+  return { num: parseInt(m[1], 10), topic: m[2].trim() };
+}
+
 function compareByName(a, b){
-  // Erst nach Fach gruppieren (in der Reihenfolge, wie die Fächer angelegt wurden),
-  // danach innerhalb des Fachs numerisch/alphabetisch nach Titel sortieren.
+  // 1. Erst nach Fach gruppieren (in der Reihenfolge, wie die Fächer angelegt wurden).
   const subjectIndexA = subjects.findIndex(s => s.id === a.subject);
   const subjectIndexB = subjects.findIndex(s => s.id === b.subject);
   if (subjectIndexA !== subjectIndexB) return subjectIndexA - subjectIndexB;
+
+  // 2. Dann nach Thema (Code nach dem Bindestrich, z.B. "GB", "WEI", "HZ").
+  const metaA = parseCardTitle(a.name);
+  const metaB = parseCardTitle(b.name);
+
+  if (metaA && metaB) {
+    const topicCompare = naturalCollator.compare(metaA.topic, metaB.topic);
+    if (topicCompare !== 0) return topicCompare;
+    // 3. Innerhalb des Themas nach Nummer aufsteigend.
+    if (metaA.num !== metaB.num) return metaA.num - metaB.num;
+    return naturalCollator.compare(a.name, b.name);
+  }
+  if (metaA && !metaB) return -1; // erkannte Titel zuerst
+  if (!metaA && metaB) return 1;
+
+  // Fallback: Titel ohne "Nr - Thema:"-Format einfach natürlich sortieren.
   return naturalCollator.compare(a.name, b.name);
 }
 
